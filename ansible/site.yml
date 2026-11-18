@@ -1,0 +1,6 @@
+---
+- name: BIND resolver with Response Policy Zones
+  hosts: resolvers
+  roles:
+    - role: bind_install
+    - role: bind_rpz

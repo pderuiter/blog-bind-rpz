@@ -1,0 +1,24 @@
+#!/bin/bash
+# /usr/local/bin/update-rpz.sh
+# {{ ansible_managed }}
+
+RPZ_DIR="{{ bind_rpz_dir }}"
+BLOCKLIST_URL="{{ bind_rpz_blocklist_url }}"
+
+# Download blocklist (abort on HTTP errors, or a failed download empties the zone)
+curl -fsS "$BLOCKLIST_URL" -o /tmp/blocklist.txt || exit 1
+
+# Convert to RPZ format
+/usr/local/bin/convert-blocklist.sh /tmp/blocklist.txt "$RPZ_DIR/{{ bind_rpz_blocklist_file }}"
+
+# Fix permissions
+chown {{ bind_install_user }}:{{ bind_install_group }} "$RPZ_DIR/{{ bind_rpz_blocklist_file }}"
+chmod 640 "$RPZ_DIR/{{ bind_rpz_blocklist_file }}"
+
+# Reload zone
+rndc reload {{ bind_rpz_blocklist_zone }}
+
+# Cleanup
+rm /tmp/blocklist.txt
+
+echo "RPZ blocklist updated: $(date)"

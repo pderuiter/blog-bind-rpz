@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  role_name: bind_rpz
+  author: Patrick de Ruiter
+  description: BIND resolver with Response Policy Zones
+  license: MIT
+  min_ansible_version: "2.16"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+    - name: EL
+      versions:
+        - "9"
+dependencies: []

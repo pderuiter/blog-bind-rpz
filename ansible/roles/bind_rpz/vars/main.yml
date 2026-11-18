@@ -1,0 +1,6 @@
+---
+# RPZ zone files live next to the other zones BIND may write to:
+# /var/named/rpz on RHEL (as in the post), /var/lib/bind/rpz on Debian/Ubuntu.
+bind_rpz_dir: "{{ bind_install_zone_dir }}/rpz"
+bind_rpz_cron_package: "{{ 'cron' if ansible_facts['os_family'] == 'Debian' else 'cronie' }}"
+bind_rpz_nginx_site: "{{ '/etc/nginx/sites-enabled/blocked' if ansible_facts['os_family'] == 'Debian' else '/etc/nginx/conf.d/blocked.conf' }}"

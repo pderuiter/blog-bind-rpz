@@ -1,0 +1,15 @@
+; {{ bind_rpz_dir }}/{{ item.file }}
+; {{ ansible_managed }}
+$TTL 300
+@   IN  SOA localhost. admin.localhost. (
+        {{ item.serial | default(2024010101) }}  ; Serial
+        3600        ; Refresh
+        1800        ; Retry
+        604800      ; Expire
+        300 )       ; Minimum TTL
+
+    IN  NS  localhost.
+
+{% for record in item.records | default([]) %}
+{{ record }}
+{% endfor %}

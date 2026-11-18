@@ -1,0 +1,36 @@
+---
+- name: Install nginx for the block page
+  ansible.builtin.package:
+    name: nginx
+    state: present
+
+- name: Create the block page directory
+  ansible.builtin.file:
+    path: "{{ bind_rpz_blockpage_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Write the block page
+  ansible.builtin.template:
+    src: blocked-index.html.j2
+    dest: "{{ bind_rpz_blockpage_root }}/index.html"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Configure the block page site
+  ansible.builtin.template:
+    src: blocked.nginx.j2
+    dest: "{{ bind_rpz_nginx_site }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload nginx
+
+- name: Start nginx
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true

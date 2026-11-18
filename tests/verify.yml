@@ -1,0 +1,97 @@
+---
+# Functional checks from the post. Run after site.yml:
+#   ansible-playbook tests/verify.yml
+- name: Verify the Response Policy Zones
+  hosts: resolvers
+  gather_facts: true
+  become: true
+  vars:
+    verify_rpz_dir: "{{ '/var/lib/bind/rpz' if ansible_facts['os_family'] == 'Debian' else '/var/named/rpz' }}"
+  tasks:
+    - name: Warm up the resolver (the first recursive lookups after a start can SERVFAIL)
+      ansible.builtin.command: dig @127.0.0.1 example.org A
+      register: verify_warmup
+      changed_when: false
+      until: verify_warmup.stdout is search('status. NOERROR')
+      retries: 10
+      delay: 3
+
+    - name: Query a blocked domain (NXDOMAIN)
+      ansible.builtin.command: dig @127.0.0.1 malicious-site.com
+      register: verify_nxdomain
+      changed_when: false
+
+    - name: Query a subdomain of a blocked domain (wildcard)
+      ansible.builtin.command: dig @127.0.0.1 www.malicious-site.com
+      register: verify_wildcard
+      changed_when: false
+
+    - name: Query the tracking domain (NODATA)
+      ansible.builtin.command: dig @127.0.0.1 tracker.example.com
+      register: verify_nodata
+      changed_when: false
+
+    - name: Query the phishing domain (local data, block page address)
+      ansible.builtin.command: dig @127.0.0.1 phishing-site.com A +short
+      register: verify_localdata
+      changed_when: false
+
+    - name: Query the redirected domain (CNAME to the info page)
+      ansible.builtin.command: dig @127.0.0.1 bad-domain.com A
+      register: verify_cname
+      changed_when: false
+      until: verify_cname.stdout is search('status. NOERROR')
+      retries: 5
+      delay: 2
+
+    - name: Query a whitelisted domain (passthru)
+      ansible.builtin.command: dig @127.0.0.1 legitimate-site.com
+      register: verify_passthru
+      changed_when: false
+
+    - name: Query a normal domain
+      ansible.builtin.command: dig @127.0.0.1 example.org A +short
+      register: verify_normal
+      changed_when: false
+
+    - name: Pick a domain from the converted blocklist
+      ansible.builtin.shell: |
+        set -o pipefail
+        grep -m1 -E '^[a-z0-9.-]+ CNAME \.$' {{ verify_rpz_dir }}/blocklist.zone | awk '{print $1}'
+      args:
+        executable: /bin/bash
+      register: verify_blocklist_domain
+      changed_when: false
+
+    - name: Query the blocklist domain (applied after min-update-interval)
+      ansible.builtin.command: "dig @127.0.0.1 {{ verify_blocklist_domain.stdout }}"
+      register: verify_blocklist
+      changed_when: false
+      until: verify_blocklist.stdout is search('status. NXDOMAIN')
+      retries: 25
+      delay: 5
+
+    - name: Read the RPZ log
+      ansible.builtin.command: cat /var/log/named/rpz.log
+      register: verify_log
+      changed_when: false
+
+    - name: Read the root crontab
+      ansible.builtin.command: crontab -l
+      register: verify_cron
+      changed_when: false
+
+    - name: Check the results
+      ansible.builtin.assert:
+        that:
+          - verify_nxdomain.stdout is search('status. NXDOMAIN')
+          - verify_wildcard.stdout is search('status. NXDOMAIN')
+          - verify_nodata.stdout is search('status. NOERROR') and verify_nodata.stdout is search('ANSWER. 0')
+          - verify_localdata.stdout | trim == '192.168.1.100'
+          - verify_cname.stdout is search('bad-domain.com.\s+\d+\s+IN\s+CNAME\s+blocked.example.com.')
+          - verify_normal.stdout | length > 0
+          - verify_log.stdout is search('rpz QNAME NXDOMAIN rewrite malicious-site.com')
+          # passthru is not logged at severity info: the whitelisted name must resolve without a rewrite
+          - verify_passthru.stdout is not search('status. NXDOMAIN')
+          - verify_log.stdout is not search('rewrite legitimate-site.com')
+          - verify_cron.stdout is search('update-rpz.sh')

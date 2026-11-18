@@ -1,0 +1,4 @@
+---
+# This setup needs no secrets. Keep secrets for your own additions here and encrypt the
+# file with: ansible-vault encrypt group_vars/all/vault.yml
+# vault_example_secret: change-me

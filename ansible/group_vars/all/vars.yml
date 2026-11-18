@@ -1,0 +1,14 @@
+---
+# Networks allowed to use the resolver (acl "trusted").
+bind_rpz_trusted_networks:
+  - localhost
+  - localnets
+  - 192.168.0.0/16
+
+# External blocklist (hosts format), loaded into the rpz-blocklist zone and refreshed daily at 03:00.
+bind_rpz_blocklist_url: https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+
+# Serve the block page that rpz.local redirects phishing-site.com to (192.168.1.100 in the post).
+bind_rpz_blockpage_enabled: false
+
+# The RPZ zones and their rules: see roles/bind_rpz/defaults/main.yml (bind_rpz_zones).

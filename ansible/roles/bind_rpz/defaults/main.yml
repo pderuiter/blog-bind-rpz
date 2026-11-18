@@ -1,0 +1,64 @@
+---
+bind_rpz_trusted_networks:
+  - localhost
+  - localnets
+  - 192.168.0.0/16
+bind_rpz_qname_wait_recurse: false
+bind_rpz_log_dir: /var/log/named
+
+# RPZ zones in evaluation order (first match wins). policy: given, passthru, nxdomain, ...
+# managed: true  -> the role writes the zone from records
+# managed: false -> the role only creates an empty zone; update-rpz.sh fills it
+bind_rpz_zones:
+  - name: rpz-whitelist
+    file: whitelist.zone
+    policy: passthru
+    managed: true
+    serial: 2024010101
+    records:
+      - "; Whitelist entries (passthru overrides blocking)"
+      - "legitimate-site.com         CNAME   rpz-passthru."
+      - "*.legitimate-site.com       CNAME   rpz-passthru."
+      - ""
+      - "required-service.example.com CNAME  rpz-passthru."
+  - name: rpz.local
+    file: rpz.local.zone
+    policy: given
+    managed: true
+    serial: 2024010101
+    records:
+      - "; Block malicious-site.com (return NXDOMAIN)"
+      - "malicious-site.com          CNAME   ."
+      - "*.malicious-site.com        CNAME   ."
+      - ""
+      - "; Block tracking domain (return NODATA)"
+      - "tracker.example.com         CNAME   *."
+      - ""
+      - "; Redirect phishing site to block page"
+      - "phishing-site.com           A       192.168.1.100"
+      - "*.phishing-site.com         A       192.168.1.100"
+      - ""
+      - "; Allow specific subdomain (passthru)"
+      - "legit.blocked-domain.com    CNAME   rpz-passthru."
+      - ""
+      - "; Block entire domain but redirect to info page"
+      - "bad-domain.com              CNAME   blocked.example.com."
+  - name: rpz-blocklist
+    file: blocklist.zone
+    policy: given
+    managed: false
+
+# External hosts-format blocklist, converted by convert-blocklist.sh and loaded into rpz-blocklist
+bind_rpz_blocklist_enabled: true
+bind_rpz_blocklist_zone: rpz-blocklist
+bind_rpz_blocklist_file: blocklist.zone
+bind_rpz_blocklist_url: https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+bind_rpz_blocklist_cron_hour: "3"
+bind_rpz_blocklist_cron_minute: "0"
+# Run update-rpz.sh once during the first deployment
+bind_rpz_blocklist_initial_update: true
+
+# Optional nginx block page for redirected domains (the post's "Creating a Block Page")
+bind_rpz_blockpage_enabled: false
+bind_rpz_blockpage_server_name: blocked.example.com
+bind_rpz_blockpage_root: /var/www/blocked

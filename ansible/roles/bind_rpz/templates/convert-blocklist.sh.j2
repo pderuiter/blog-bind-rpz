@@ -1,0 +1,31 @@
+#!/bin/bash
+# convert-blocklist.sh
+# {{ ansible_managed }}
+
+INPUT="$1"
+OUTPUT="$2"
+SOA_SERIAL=$(date +%Y%m%d%H)
+
+cat > "$OUTPUT" << EOF
+\$TTL 300
+@   IN  SOA localhost. admin.localhost. (
+        $SOA_SERIAL  ; Serial
+        3600         ; Refresh
+        1800         ; Retry
+        604800       ; Expire
+        300 )        ; Minimum TTL
+
+    IN  NS  localhost.
+
+; Converted from $INPUT
+EOF
+
+# Convert hosts file format (0.0.0.0 domain or 127.0.0.1 domain)
+grep -E "^(0\.0\.0\.0|127\.0\.0\.1)" "$INPUT" | \
+    awk '{print $2}' | \
+    grep -v localhost | \
+    grep -v '^0\.0\.0\.0$' | \
+    sort -u | \
+    while read domain; do
+        echo "$domain CNAME ."
+    done >> "$OUTPUT"

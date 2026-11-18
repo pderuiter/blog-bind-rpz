@@ -1,0 +1,51 @@
+// {{ bind_install_options_conf }}
+// {{ ansible_managed }}
+
+acl "trusted" {
+{% for net in bind_rpz_trusted_networks %}
+    {{ net }};
+{% endfor %}
+};
+
+options {
+    directory "{{ bind_install_data_dir }}";
+
+    recursion yes;
+    allow-recursion { trusted; };
+
+    dnssec-validation auto;
+
+    response-policy {
+{% for zone in bind_rpz_zones %}
+        zone "{{ zone.name }}" policy {{ zone.policy | default('given') }};
+{% endfor %}
+    } qname-wait-recurse {{ 'yes' if bind_rpz_qname_wait_recurse else 'no' }};
+};
+
+logging {
+    channel rpz_log {
+        file "{{ bind_rpz_log_dir }}/rpz.log" versions 10 size 50m;
+        severity info;
+        print-time yes;
+        print-category yes;
+        print-severity yes;
+    };
+
+    category rpz { rpz_log; };
+};
+{% for zone in bind_rpz_zones %}
+
+zone "{{ zone.name }}" {
+    type primary;
+    file "{{ bind_rpz_dir }}/{{ zone.file }}";
+    allow-query { none; };
+    allow-transfer { none; };
+};
+{% endfor %}
+{% if ansible_facts['os_family'] == 'RedHat' %}
+
+zone "." {
+    type hint;
+    file "named.ca";
+};
+{% endif %}

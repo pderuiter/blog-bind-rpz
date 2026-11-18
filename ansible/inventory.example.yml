@@ -1,0 +1,8 @@
+---
+all:
+  children:
+    resolvers:
+      hosts:
+        resolver1:
+          ansible_host: 192.0.2.53
+          ansible_user: ubuntu

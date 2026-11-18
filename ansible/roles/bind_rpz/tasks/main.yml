@@ -1,0 +1,96 @@
+---
+- name: Install the tools used by the blocklist scripts
+  ansible.builtin.package:
+    name:
+      - curl
+      - "{{ bind_rpz_cron_package }}"
+    state: present
+
+- name: Create the RPZ and log directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ bind_install_user }}"
+    group: "{{ bind_install_group }}"
+    mode: "0750"
+  loop:
+    - "{{ bind_rpz_dir }}"
+    - "{{ bind_rpz_log_dir }}"
+
+- name: Write the managed RPZ zones
+  ansible.builtin.template:
+    src: rpz.zone.j2
+    dest: "{{ bind_rpz_dir }}/{{ item.file }}"
+    owner: "{{ bind_install_user }}"
+    group: "{{ bind_install_group }}"
+    mode: "0640"
+    validate: "named-checkzone {{ item.name }} %s"
+  loop: "{{ bind_rpz_zones | selectattr('managed', 'equalto', true) | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify: Restart named
+
+- name: Create empty zones for the externally filled RPZ zones
+  ansible.builtin.template:
+    src: rpz.zone.j2
+    dest: "{{ bind_rpz_dir }}/{{ item.file }}"
+    owner: "{{ bind_install_user }}"
+    group: "{{ bind_install_group }}"
+    mode: "0640"
+    force: false
+  loop: "{{ bind_rpz_zones | selectattr('managed', 'equalto', false) | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify: Restart named
+
+- name: Configure the resolver with response-policy zones
+  ansible.builtin.template:
+    src: named.conf.j2
+    dest: "{{ bind_install_options_conf }}"
+    owner: root
+    group: "{{ bind_install_group }}"
+    mode: "0640"
+    validate: named-checkconf %s
+  notify: Restart named
+
+- name: Install the blocklist scripts
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/usr/local/bin/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - convert-blocklist.sh
+    - update-rpz.sh
+  when: bind_rpz_blocklist_enabled
+
+- name: Schedule the daily blocklist update
+  ansible.builtin.cron:
+    name: Update RPZ blocklist
+    minute: "{{ bind_rpz_blocklist_cron_minute }}"
+    hour: "{{ bind_rpz_blocklist_cron_hour }}"
+    job: /usr/local/bin/update-rpz.sh >> /var/log/rpz-update.log 2>&1
+    state: "{{ 'present' if bind_rpz_blocklist_enabled else 'absent' }}"
+
+- name: Apply configuration changes before loading the blocklist
+  ansible.builtin.meta: flush_handlers
+
+- name: Start named
+  ansible.builtin.service:
+    name: "{{ bind_install_service }}"
+    state: started
+
+- name: Load the blocklist for the first time
+  ansible.builtin.shell: >-
+    /usr/local/bin/update-rpz.sh >> /var/log/rpz-update.log 2>&1
+    && touch {{ bind_rpz_dir }}/.blocklist-initialized
+  args:
+    creates: "{{ bind_rpz_dir }}/.blocklist-initialized"
+  when:
+    - bind_rpz_blocklist_enabled
+    - bind_rpz_blocklist_initial_update
+
+- name: Set up the block page
+  ansible.builtin.include_tasks: blockpage.yml
+  when: bind_rpz_blockpage_enabled
