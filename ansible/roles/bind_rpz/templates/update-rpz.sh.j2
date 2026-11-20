@@ -1,6 +1,7 @@
 #!/bin/bash
 # /usr/local/bin/update-rpz.sh
 # {{ ansible_managed }}
+set -e
 
 RPZ_DIR="{{ bind_rpz_dir }}"
 BLOCKLIST_URL="{{ bind_rpz_blocklist_url }}"
